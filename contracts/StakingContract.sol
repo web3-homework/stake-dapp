@@ -3,6 +3,7 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+// Solidity v0.8+ 内置溢出检查，无需引入 SafeMath
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 /**
