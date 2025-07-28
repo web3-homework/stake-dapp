@@ -1,131 +1,216 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ethers } from "ethers"
+// 替换导入
+import { WalletConnectButton } from "@/components/wallet-connect-button"
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi"
+import { parseEther, formatEther } from "viem"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Wallet, Coins, TrendingUp, ArrowUpCircle, ArrowDownCircle } from "lucide-react"
+import { Coins, TrendingUp, ArrowUpCircle, ArrowDownCircle, Wallet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-// 合约ABI (简化版)
+// 合约ABI
 const STAKING_ABI = [
-  "function stake() external payable",
-  "function unstake(uint256 amount) external",
-  "function getStakedAmount(address user) external view returns (uint256)",
-  "function getRewards(address user) external view returns (uint256)",
-  "function claimRewards() external",
-  "function totalStaked() external view returns (uint256)",
-  "function rewardRate() external view returns (uint256)",
-  "event Staked(address indexed user, uint256 amount)",
-  "event Unstaked(address indexed user, uint256 amount)",
-  "event RewardsClaimed(address indexed user, uint256 amount)",
-]
+  {
+    inputs: [],
+    name: "stake",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "amount", type: "uint256" }],
+    name: "unstake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "address", name: "user", type: "address" }],
+    name: "getStakedAmount",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "address", name: "user", type: "address" }],
+    name: "getRewards",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "claimRewards",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "totalStaked",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "rewardRate",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "Staked",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "Unstaked",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "RewardsClaimed",
+    type: "event",
+  },
+] as const
 
-// 合约地址 (示例地址)
-const STAKING_CONTRACT_ADDRESS = "0x1234567890123456789012345678901234567890"
+// 合约地址 (需要替换为实际部署的合约地址)
+const STAKING_CONTRACT_ADDRESS = "0x1234567890123456789012345678901234567890" as `0x${string}`
 
 export default function StakingDApp() {
-  const [account, setAccount] = useState<string>("")
-  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null)
-  const [contract, setContract] = useState<ethers.Contract | null>(null)
-  const [balance, setBalance] = useState<string>("0")
-  const [stakedAmount, setStakedAmount] = useState<string>("0")
-  const [rewards, setRewards] = useState<string>("0")
-  const [totalStaked, setTotalStaked] = useState<string>("0")
-  const [stakeAmount, setStakeAmount] = useState<string>("")
-  const [unstakeAmount, setUnstakeAmount] = useState<string>("")
-  const [loading, setLoading] = useState<boolean>(false)
+  const { address, isConnected } = useAccount()
   const { toast } = useToast()
 
-  // 连接钱包
-  const connectWallet = async () => {
-    try {
-      if (typeof window.ethereum !== "undefined") {
-        const provider = new ethers.BrowserProvider(window.ethereum)
-        const accounts = await provider.send("eth_requestAccounts", [])
-        const signer = await provider.getSigner()
-        const contract = new ethers.Contract(STAKING_CONTRACT_ADDRESS, STAKING_ABI, signer)
+  const [stakeAmount, setStakeAmount] = useState<string>("")
+  const [unstakeAmount, setUnstakeAmount] = useState<string>("")
 
-        setProvider(provider)
-        setAccount(accounts[0])
-        setContract(contract)
+  // 获取ETH余额
+  const { data: balance } = useBalance({
+    address: address,
+  })
 
-        await updateBalances(accounts[0], provider, contract)
+  // 读取合约数据
+  const { data: stakedAmount, refetch: refetchStakedAmount } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_ABI,
+    functionName: "getStakedAmount",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  })
 
-        toast({
-          title: "钱包连接成功",
-          description: `地址: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`,
-        })
-      } else {
-        toast({
-          title: "错误",
-          description: "请安装MetaMask钱包",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("连接钱包失败:", error)
-      toast({
-        title: "连接失败",
-        description: "无法连接到钱包",
-        variant: "destructive",
-      })
-    }
+  const { data: rewards, refetch: refetchRewards } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_ABI,
+    functionName: "getRewards",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  })
+
+  const { data: totalStaked, refetch: refetchTotalStaked } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_ABI,
+    functionName: "totalStaked",
+  })
+
+  const { data: rewardRate } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_ABI,
+    functionName: "rewardRate",
+  })
+
+  // 写入合约
+  const { data: stakeHash, writeContract: writeStake, isPending: isStakePending } = useWriteContract()
+
+  const { data: unstakeHash, writeContract: writeUnstake, isPending: isUnstakePending } = useWriteContract()
+
+  const { data: claimHash, writeContract: writeClaim, isPending: isClaimPending } = useWriteContract()
+
+  // 等待交易确认
+  const { isLoading: isStakeLoading, isSuccess: isStakeSuccess } = useWaitForTransactionReceipt({
+    hash: stakeHash,
+  })
+
+  const { isLoading: isUnstakeLoading, isSuccess: isUnstakeSuccess } = useWaitForTransactionReceipt({
+    hash: unstakeHash,
+  })
+
+  const { isLoading: isClaimLoading, isSuccess: isClaimSuccess } = useWaitForTransactionReceipt({
+    hash: claimHash,
+  })
+
+  // 刷新数据
+  const refreshData = () => {
+    refetchStakedAmount()
+    refetchRewards()
+    refetchTotalStaked()
   }
 
-  // 断开连接
-  const disconnectWallet = () => {
-    setAccount("")
-    setProvider(null)
-    setContract(null)
-    setBalance("0")
-    setStakedAmount("0")
-    setRewards("0")
-    setTotalStaked("0")
-    toast({
-      title: "钱包已断开",
-      description: "已成功断开钱包连接",
-    })
-  }
-
-  // 更新余额信息
-  const updateBalances = async (userAccount: string, provider: ethers.BrowserProvider, contract: ethers.Contract) => {
-    try {
-      const balance = await provider.getBalance(userAccount)
-      const staked = await contract.getStakedAmount(userAccount)
-      const rewards = await contract.getRewards(userAccount)
-      const total = await contract.totalStaked()
-
-      setBalance(ethers.formatEther(balance))
-      setStakedAmount(ethers.formatEther(staked))
-      setRewards(ethers.formatEther(rewards))
-      setTotalStaked(ethers.formatEther(total))
-    } catch (error) {
-      console.error("更新余额失败:", error)
-    }
-  }
-
-  // 质押
-  const handleStake = async () => {
-    if (!contract || !stakeAmount) return
-
-    setLoading(true)
-    try {
-      const tx = await contract.stake({
-        value: ethers.parseEther(stakeAmount),
-      })
-      await tx.wait()
-
-      await updateBalances(account, provider!, contract)
-      setStakeAmount("")
-
+  // 监听交易成功
+  useEffect(() => {
+    if (isStakeSuccess) {
       toast({
         title: "质押成功",
         description: `已质押 ${stakeAmount} ETH`,
+      })
+      setStakeAmount("")
+      refreshData()
+    }
+  }, [isStakeSuccess, stakeAmount, toast])
+
+  useEffect(() => {
+    if (isUnstakeSuccess) {
+      toast({
+        title: "解质押成功",
+        description: `已解质押 ${unstakeAmount} ETH`,
+      })
+      setUnstakeAmount("")
+      refreshData()
+    }
+  }, [isUnstakeSuccess, unstakeAmount, toast])
+
+  useEffect(() => {
+    if (isClaimSuccess) {
+      toast({
+        title: "奖励领取成功",
+        description: `已领取 ${rewards ? formatEther(rewards) : "0"} ETH 奖励`,
+      })
+      refreshData()
+    }
+  }, [isClaimSuccess, rewards, toast])
+
+  // 质押函数
+  const handleStake = async () => {
+    if (!stakeAmount || !address) return
+
+    try {
+      writeStake({
+        address: STAKING_CONTRACT_ADDRESS,
+        abi: STAKING_ABI,
+        functionName: "stake",
+        value: parseEther(stakeAmount),
       })
     } catch (error) {
       console.error("质押失败:", error)
@@ -135,24 +220,18 @@ export default function StakingDApp() {
         variant: "destructive",
       })
     }
-    setLoading(false)
   }
 
-  // 解质押
+  // 解质押函数
   const handleUnstake = async () => {
-    if (!contract || !unstakeAmount) return
+    if (!unstakeAmount || !address) return
 
-    setLoading(true)
     try {
-      const tx = await contract.unstake(ethers.parseEther(unstakeAmount))
-      await tx.wait()
-
-      await updateBalances(account, provider!, contract)
-      setUnstakeAmount("")
-
-      toast({
-        title: "解质押成功",
-        description: `已解质押 ${unstakeAmount} ETH`,
+      writeUnstake({
+        address: STAKING_CONTRACT_ADDRESS,
+        abi: STAKING_ABI,
+        functionName: "unstake",
+        args: [parseEther(unstakeAmount)],
       })
     } catch (error) {
       console.error("解质押失败:", error)
@@ -162,23 +241,17 @@ export default function StakingDApp() {
         variant: "destructive",
       })
     }
-    setLoading(false)
   }
 
-  // 领取奖励
+  // 领取奖励函数
   const handleClaimRewards = async () => {
-    if (!contract) return
+    if (!address) return
 
-    setLoading(true)
     try {
-      const tx = await contract.claimRewards()
-      await tx.wait()
-
-      await updateBalances(account, provider!, contract)
-
-      toast({
-        title: "奖励领取成功",
-        description: `已领取 ${rewards} ETH 奖励`,
+      writeClaim({
+        address: STAKING_CONTRACT_ADDRESS,
+        abi: STAKING_ABI,
+        functionName: "claimRewards",
       })
     } catch (error) {
       console.error("领取奖励失败:", error)
@@ -188,24 +261,10 @@ export default function StakingDApp() {
         variant: "destructive",
       })
     }
-    setLoading(false)
   }
 
-  // 监听账户变化
-  useEffect(() => {
-    if (typeof window.ethereum !== "undefined") {
-      window.ethereum.on("accountsChanged", (accounts: string[]) => {
-        if (accounts.length === 0) {
-          disconnectWallet()
-        } else {
-          setAccount(accounts[0])
-          if (provider && contract) {
-            updateBalances(accounts[0], provider, contract)
-          }
-        }
-      })
-    }
-  }, [provider, contract])
+  const isLoading =
+    isStakePending || isStakeLoading || isUnstakePending || isUnstakeLoading || isClaimPending || isClaimLoading
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -217,24 +276,11 @@ export default function StakingDApp() {
             <h1 className="text-3xl font-bold text-gray-900">质押 DApp</h1>
           </div>
 
-          {!account ? (
-            <Button onClick={connectWallet} className="flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              连接钱包
-            </Button>
-          ) : (
-            <div className="flex items-center gap-4">
-              <Badge variant="secondary" className="px-3 py-1">
-                {account.slice(0, 6)}...{account.slice(-4)}
-              </Badge>
-              <Button variant="outline" onClick={disconnectWallet}>
-                断开连接
-              </Button>
-            </div>
-          )}
+          {/* 在头部部分替换ConnectButton为WalletConnectButton */}
+          <WalletConnectButton />
         </div>
 
-        {account ? (
+        {isConnected ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* 账户信息 */}
             <Card>
@@ -247,17 +293,23 @@ export default function StakingDApp() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-sm text-gray-600">钱包余额</Label>
-                  <p className="text-2xl font-bold">{Number.parseFloat(balance).toFixed(4)} ETH</p>
+                  <p className="text-2xl font-bold">
+                    {balance ? Number.parseFloat(formatEther(balance.value)).toFixed(4) : "0.0000"} ETH
+                  </p>
                 </div>
                 <Separator />
                 <div>
                   <Label className="text-sm text-gray-600">已质押金额</Label>
-                  <p className="text-2xl font-bold text-blue-600">{Number.parseFloat(stakedAmount).toFixed(4)} ETH</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {stakedAmount ? Number.parseFloat(formatEther(stakedAmount)).toFixed(4) : "0.0000"} ETH
+                  </p>
                 </div>
                 <Separator />
                 <div>
                   <Label className="text-sm text-gray-600">待领取奖励</Label>
-                  <p className="text-2xl font-bold text-green-600">{Number.parseFloat(rewards).toFixed(6)} ETH</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {rewards ? Number.parseFloat(formatEther(rewards)).toFixed(6) : "0.000000"} ETH
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -280,10 +332,11 @@ export default function StakingDApp() {
                     placeholder="0.0"
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
+                    disabled={isLoading}
                   />
                 </div>
-                <Button onClick={handleStake} disabled={!stakeAmount || loading} className="w-full">
-                  {loading ? "处理中..." : "质押"}
+                <Button onClick={handleStake} disabled={!stakeAmount || isLoading} className="w-full">
+                  {isStakePending || isStakeLoading ? "处理中..." : "质押"}
                 </Button>
 
                 <Separator />
@@ -296,16 +349,17 @@ export default function StakingDApp() {
                     placeholder="0.0"
                     value={unstakeAmount}
                     onChange={(e) => setUnstakeAmount(e.target.value)}
+                    disabled={isLoading}
                   />
                 </div>
                 <Button
                   onClick={handleUnstake}
-                  disabled={!unstakeAmount || loading}
+                  disabled={!unstakeAmount || isLoading}
                   variant="outline"
                   className="w-full bg-transparent"
                 >
                   <ArrowDownCircle className="h-4 w-4 mr-2" />
-                  {loading ? "处理中..." : "解质押"}
+                  {isUnstakePending || isUnstakeLoading ? "处理中..." : "解质押"}
                 </Button>
               </CardContent>
             </Card>
@@ -321,25 +375,29 @@ export default function StakingDApp() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-sm text-gray-600">总质押量</Label>
-                  <p className="text-2xl font-bold">{Number.parseFloat(totalStaked).toFixed(2)} ETH</p>
+                  <p className="text-2xl font-bold">
+                    {totalStaked ? Number.parseFloat(formatEther(totalStaked)).toFixed(2) : "0.00"} ETH
+                  </p>
                 </div>
                 <Separator />
                 <div>
                   <Label className="text-sm text-gray-600">年化收益率</Label>
-                  <p className="text-2xl font-bold text-green-600">12%</p>
+                  <p className="text-2xl font-bold text-green-600">{rewardRate ? `${rewardRate}%` : "12%"}</p>
                 </div>
                 <Separator />
                 <div>
                   <Label className="text-sm text-gray-600">我的奖励</Label>
-                  <p className="text-xl font-bold text-green-600">{Number.parseFloat(rewards).toFixed(6)} ETH</p>
+                  <p className="text-xl font-bold text-green-600">
+                    {rewards ? Number.parseFloat(formatEther(rewards)).toFixed(6) : "0.000000"} ETH
+                  </p>
                 </div>
                 <Button
                   onClick={handleClaimRewards}
-                  disabled={Number.parseFloat(rewards) === 0 || loading}
+                  disabled={!rewards || rewards === 0n || isLoading}
                   className="w-full"
                   variant="secondary"
                 >
-                  {loading ? "处理中..." : "领取奖励"}
+                  {isClaimPending || isClaimLoading ? "处理中..." : "领取奖励"}
                 </Button>
               </CardContent>
             </Card>
@@ -350,9 +408,8 @@ export default function StakingDApp() {
               <Wallet className="h-16 w-16 mx-auto mb-4 text-gray-400" />
               <h2 className="text-2xl font-bold mb-2">连接您的钱包</h2>
               <p className="text-gray-600 mb-6">请连接您的Web3钱包以开始使用质押功能</p>
-              <Button onClick={connectWallet} size="lg">
-                连接钱包
-              </Button>
+              {/* 在未连接状态的卡片中也替换 */}
+              <WalletConnectButton />
             </CardContent>
           </Card>
         )}
