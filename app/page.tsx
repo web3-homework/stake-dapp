@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-// 替换导入
-import { WalletConnectButton } from "@/components/wallet-connect-button"
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi"
 import { parseEther, formatEther } from "viem"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Coins, TrendingUp, ArrowUpCircle, ArrowDownCircle, Wallet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 // 合约ABI
 const STAKING_ABI = [
@@ -100,8 +99,8 @@ export default function StakingDApp() {
   const { address, isConnected } = useAccount()
   const { toast } = useToast()
 
-  const [stakeAmount, setStakeAmount] = useState<string>("")
-  const [unstakeAmount, setUnstakeAmount] = useState<string>("")
+  const [stakeAmount, setStakeAmount] = useState<string>("0.0")
+  const [unstakeAmount, setUnstakeAmount] = useState<string>("0.0")
 
   // 获取ETH余额
   const { data: balance } = useBalance({
@@ -276,8 +275,7 @@ export default function StakingDApp() {
             <h1 className="text-3xl font-bold text-gray-900">质押 DApp</h1>
           </div>
 
-          {/* 在头部部分替换ConnectButton为WalletConnectButton */}
-          <WalletConnectButton />
+          <ConnectButton />
         </div>
 
         {isConnected ? (
@@ -329,13 +327,14 @@ export default function StakingDApp() {
                   <Input
                     id="stake-amount"
                     type="number"
-                    placeholder="0.0"
+                    placeholder="0"
+                    min={0}
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
                     disabled={isLoading}
                   />
                 </div>
-                <Button onClick={handleStake} disabled={!stakeAmount || isLoading} className="w-full">
+                <Button onClick={handleStake} disabled={!Number(stakeAmount) || isLoading} className="w-full">
                   {isStakePending || isStakeLoading ? "处理中..." : "质押"}
                 </Button>
 
@@ -346,7 +345,8 @@ export default function StakingDApp() {
                   <Input
                     id="unstake-amount"
                     type="number"
-                    placeholder="0.0"
+                    placeholder="0"
+                    min={0}
                     value={unstakeAmount}
                     onChange={(e) => setUnstakeAmount(e.target.value)}
                     disabled={isLoading}
@@ -354,7 +354,7 @@ export default function StakingDApp() {
                 </div>
                 <Button
                   onClick={handleUnstake}
-                  disabled={!unstakeAmount || isLoading}
+                  disabled={!Number(unstakeAmount) || isLoading}
                   variant="outline"
                   className="w-full bg-transparent"
                 >
@@ -393,7 +393,7 @@ export default function StakingDApp() {
                 </div>
                 <Button
                   onClick={handleClaimRewards}
-                  disabled={!rewards || rewards === 0n || isLoading}
+                  disabled={!rewards || rewards === BigInt(0) || isLoading}
                   className="w-full"
                   variant="secondary"
                 >
@@ -409,7 +409,6 @@ export default function StakingDApp() {
               <h2 className="text-2xl font-bold mb-2">连接您的钱包</h2>
               <p className="text-gray-600 mb-6">请连接您的Web3钱包以开始使用质押功能</p>
               {/* 在未连接状态的卡片中也替换 */}
-              <WalletConnectButton />
             </CardContent>
           </Card>
         )}

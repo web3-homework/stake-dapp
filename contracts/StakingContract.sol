@@ -38,6 +38,7 @@ contract StakingContract is ReentrancyGuard, Ownable {
      */
     function stake() external payable nonReentrant {
         require(msg.value > 0, "Stake amount must be greater than 0");
+        require(msg.value <= msg.sender.balance, "Stake amount exceeds user's balance");
         
         StakeInfo storage userStake = stakes[msg.sender];
         
