@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-// Solidity v0.8+ 内置溢出检查，无需引入 SafeMath
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title StakingContract
- * @dev 一个简单的ETH质押合约，用户可以质押ETH并获得奖励
+ * @dev 一个改进的ETH质押合约，用户可以质押ETH并获得奖励
  */
-contract StakingContract is ReentrancyGuard, Ownable {
-    using SafeMath for uint256;
-
+contract StakingContract is ReentrancyGuard, Ownable, Pausable {
     // 质押信息结构体
     struct StakeInfo {
         uint256 amount;           // 质押金额
         uint256 timestamp;        // 质押时间戳
         uint256 lastRewardTime;   // 上次领取奖励时间
+        uint256 rewardDebt;       // 奖励债务，用于计算应得奖励
     }
 
     // 状态变量
@@ -25,87 +23,60 @@ contract StakingContract is ReentrancyGuard, Ownable {
     uint256 public totalStaked;
     uint256 public rewardRate = 12; // 年化收益率 12%
     uint256 public constant SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
+    uint256 public constant PRECISION = 1e18; // 精度因子
+    uint256 public rewardPerTokenStored;      // 每质押单位累计奖励
+    uint256 public lastUpdateTime;            // 上次更新时间
     
     // 事件
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event RewardsClaimed(address indexed user, uint256 amount);
     event RewardRateUpdated(uint256 newRate);
+    event ContractPaused(bool paused);
+    event RewardsDeposited(uint256 amount);
 
-    constructor() {}
-
-    /**
-     * @dev 质押ETH
-     */
-    function stake() external payable nonReentrant {
-        require(msg.value > 0, "Stake amount must be greater than 0");
-        require(msg.value <= msg.sender.balance, "Stake amount exceeds user's balance");
-        
-        StakeInfo storage userStake = stakes[msg.sender];
-        
-        // 如果用户已有质押，先计算并累加奖励
-        if (userStake.amount > 0) {
-            uint256 pendingRewards = calculateRewards(msg.sender);
-            if (pendingRewards > 0) {
-                payable(msg.sender).transfer(pendingRewards);
-                emit RewardsClaimed(msg.sender, pendingRewards);
-            }
-        }
-        
-        // 更新质押信息
-        userStake.amount = userStake.amount.add(msg.value);
-        userStake.timestamp = block.timestamp;
-        userStake.lastRewardTime = block.timestamp;
-        
-        totalStaked = totalStaked.add(msg.value);
-        
-        emit Staked(msg.sender, msg.value);
+    constructor() Ownable(msg.sender) {
+        lastUpdateTime = block.timestamp;
     }
 
     /**
-     * @dev 解质押
-     * @param amount 解质押金额
+     * @dev 暂停合约（仅所有者）
      */
-    function unstake(uint256 amount) external nonReentrant {
-        StakeInfo storage userStake = stakes[msg.sender];
-        require(userStake.amount >= amount, "Insufficient staked amount");
-        require(amount > 0, "Unstake amount must be greater than 0");
-        
-        // 计算并发放奖励
-        uint256 pendingRewards = calculateRewards(msg.sender);
-        if (pendingRewards > 0) {
-            payable(msg.sender).transfer(pendingRewards);
-            emit RewardsClaimed(msg.sender, pendingRewards);
-        }
-        
-        // 更新质押信息
-        userStake.amount = userStake.amount.sub(amount);
-        userStake.lastRewardTime = block.timestamp;
-        
-        if (userStake.amount == 0) {
-            delete stakes[msg.sender];
-        }
-        
-        totalStaked = totalStaked.sub(amount);
-        
-        // 返还质押的ETH
-        payable(msg.sender).transfer(amount);
-        
-        emit Unstaked(msg.sender, amount);
+    function pause() external onlyOwner {
+        _pause();
+        emit ContractPaused(true);
     }
 
     /**
-     * @dev 领取奖励
+     * @dev 恢复合约（仅所有者）
      */
-    function claimRewards() external nonReentrant {
-        uint256 rewards = calculateRewards(msg.sender);
-        require(rewards > 0, "No rewards available");
+    function unpause() external onlyOwner {
+        _unpause();
+        emit ContractPaused(false);
+    }
+
+    /**
+     * @dev 更新奖励状态
+     */
+    function _updateReward(address account) internal {
+        if (totalStaked == 0) {
+            lastUpdateTime = block.timestamp;
+            return;
+        }
         
-        stakes[msg.sender].lastRewardTime = block.timestamp;
+        uint256 timeElapsed = block.timestamp - lastUpdateTime;
+        if (timeElapsed <= 0) {
+            return;
+        }
         
-        payable(msg.sender).transfer(rewards);
+        uint256 reward = (timeElapsed * totalStaked * rewardRate * PRECISION) / (100 * SECONDS_PER_YEAR);
+        rewardPerTokenStored = rewardPerTokenStored + (reward / totalStaked);
+        lastUpdateTime = block.timestamp;
         
-        emit RewardsClaimed(msg.sender, rewards);
+        if (account != address(0)) {
+            StakeInfo storage userStake = stakes[account];
+            userStake.rewardDebt = userStake.amount * rewardPerTokenStored / PRECISION;
+        }
     }
 
     /**
@@ -119,14 +90,129 @@ contract StakingContract is ReentrancyGuard, Ownable {
             return 0;
         }
         
-        uint256 stakingDuration = block.timestamp.sub(userStake.lastRewardTime);
-        uint256 rewards = userStake.amount
-            .mul(rewardRate)
-            .mul(stakingDuration)
-            .div(100)
-            .div(SECONDS_PER_YEAR);
-            
-        return rewards;
+        uint256 currentRewardPerToken = rewardPerTokenStored;
+        if (block.timestamp > lastUpdateTime && totalStaked != 0) {
+            uint256 timeElapsed = block.timestamp - lastUpdateTime;
+            uint256 reward = (timeElapsed * totalStaked * rewardRate * PRECISION) / (100 * SECONDS_PER_YEAR);
+            currentRewardPerToken = currentRewardPerToken + (reward / totalStaked);
+        }
+        
+        uint256 pending = (userStake.amount * currentRewardPerToken / PRECISION) - userStake.rewardDebt;
+        return pending;
+    }
+
+    /**
+     * @dev 质押ETH
+     */
+    function stake() external payable nonReentrant whenNotPaused {
+        require(msg.value > 0, "Stake amount must be greater than 0");
+        
+        _updateReward(msg.sender);
+        
+        StakeInfo storage userStake = stakes[msg.sender];
+        
+        // 更新质押信息
+        if (userStake.amount == 0) {
+            // 新质押
+            userStake.timestamp = block.timestamp;
+        }
+        
+        userStake.amount += msg.value;
+        userStake.lastRewardTime = block.timestamp;
+        userStake.rewardDebt = userStake.amount * rewardPerTokenStored / PRECISION;
+        
+        totalStaked += msg.value;
+        
+        emit Staked(msg.sender, msg.value);
+    }
+
+    /**
+     * @dev 解质押
+     * @param amount 解质押金额
+     */
+    function unstake(uint256 amount) external nonReentrant whenNotPaused {
+        StakeInfo storage userStake = stakes[msg.sender];
+        require(userStake.amount >= amount, "Insufficient staked amount");
+        require(amount > 0, "Unstake amount must be greater than 0");
+        
+        _updateReward(msg.sender);
+        
+        uint256 rewards = calculateRewards(msg.sender);
+        
+        // 更新质押信息
+        userStake.amount -= amount;
+        userStake.lastRewardTime = block.timestamp;
+        userStake.rewardDebt = userStake.amount * rewardPerTokenStored / PRECISION;
+        
+        if (userStake.amount == 0) {
+            delete stakes[msg.sender];
+        }
+        
+        totalStaked -= amount;
+        
+        // 发放奖励
+        if (rewards > 0) {
+            require(address(this).balance >= rewards + amount, "Insufficient contract balance");
+            (bool success, ) = msg.sender.call{value: rewards}("");
+            require(success, "Failed to send rewards");
+            emit RewardsClaimed(msg.sender, rewards);
+        }
+        
+        // 返还质押的ETH
+        (bool unstakeSuccess, ) = msg.sender.call{value: amount}("");
+        require(unstakeSuccess, "Unstake transfer failed");
+        
+        emit Unstaked(msg.sender, amount);
+    }
+
+    /**
+     * @dev 领取奖励
+     */
+    function claimRewards() external nonReentrant whenNotPaused {
+        _updateReward(msg.sender);
+        
+        uint256 rewards = calculateRewards(msg.sender);
+        require(rewards > 0, "No rewards available");
+        require(address(this).balance >= rewards, "Insufficient contract balance");
+        
+        stakes[msg.sender].lastRewardTime = block.timestamp;
+        stakes[msg.sender].rewardDebt = stakes[msg.sender].amount * rewardPerTokenStored / PRECISION;
+        
+        (bool success, ) = msg.sender.call{value: rewards}("");
+        require(success, "Failed to send rewards");
+        
+        emit RewardsClaimed(msg.sender, rewards);
+    }
+
+    /**
+     * @dev 设置奖励率（仅所有者）
+     * @param newRate 新的年化收益率
+     */
+    function setRewardRate(uint256 newRate) external onlyOwner {
+        require(newRate <= 50, "Reward rate cannot exceed 50%");
+        _updateReward(address(0));
+        rewardRate = newRate;
+        emit RewardRateUpdated(newRate);
+    }
+
+    /**
+     * @dev 向合约存入ETH用于支付奖励（仅所有者）
+     */
+    function depositRewards() external payable onlyOwner {
+        require(msg.value > 0, "Deposit amount must be greater than 0");
+        _updateReward(address(0));
+        emit RewardsDeposited(msg.value);
+    }
+
+    /**
+     * @dev 提取合约中的ETH（仅所有者，紧急情况使用）
+     * @param amount 提取金额
+     */
+    function emergencyWithdraw(uint256 amount) external onlyOwner {
+        // 只能提取奖励资金，不能提取用户质押资金
+        require(amount <= address(this).balance - totalStaked, "Cannot withdraw user staked funds");
+        (bool success, ) = owner().call{value: amount}("");
+        require(success, "Failed to withdraw");
     }
 
     /**
@@ -148,32 +234,6 @@ contract StakingContract is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev 设置奖励率（仅所有者）
-     * @param newRate 新的年化收益率
-     */
-    function setRewardRate(uint256 newRate) external onlyOwner {
-        require(newRate <= 100, "Reward rate cannot exceed 100%");
-        rewardRate = newRate;
-        emit RewardRateUpdated(newRate);
-    }
-
-    /**
-     * @dev 向合约存入ETH用于支付奖励（仅所有者）
-     */
-    function depositRewards() external payable onlyOwner {
-        require(msg.value > 0, "Deposit amount must be greater than 0");
-    }
-
-    /**
-     * @dev 提取合约中的ETH（仅所有者，紧急情况使用）
-     * @param amount 提取金额
-     */
-    function emergencyWithdraw(uint256 amount) external onlyOwner {
-        require(amount <= address(this).balance, "Insufficient contract balance");
-        payable(owner()).transfer(amount);
-    }
-
-    /**
      * @dev 获取合约余额
      * @return 合约ETH余额
      */
@@ -185,4 +245,4 @@ contract StakingContract is ReentrancyGuard, Ownable {
      * @dev 接收ETH
      */
     receive() external payable {}
-}
+}    
