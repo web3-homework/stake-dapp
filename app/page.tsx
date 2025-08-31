@@ -698,7 +698,7 @@ export default function StakingDApp() {
 	// 渲染
 	// ========================
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 transition-colors duration-300">
+		<div className="h-screen overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 transition-colors duration-300">
 		<div className="max-w-6xl mx-auto">
 			{/* Header */}
 			<div className="flex items-center justify-between mb-8">
@@ -865,7 +865,7 @@ export default function StakingDApp() {
 
 				{/* 👇 管理员面板（仅管理员可见） */}
 				{isAdmin && (
-				<Card className="lg:col-span-3 shadow-xl border-2 border-yellow-200 bg-yellow-50">
+				<Card className="lg:col-span-3 shadow-xl border-2 border-yellow-200 bg-yellow-50 h-64">
 					<CardHeader>
 					<CardTitle className="flex items-center gap-2 text-yellow-800">
 						<Settings className="h-5 w-5" />
