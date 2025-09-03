@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\study\\web3-homework\\stake-dapp\\contracts\\StakingContract.sol": {
-      "lastModificationDate": 1756621652923,
-      "contentHash": "92efa3d533ef54546878a448f39c3a95",
+      "lastModificationDate": 1756895983176,
+      "contentHash": "2409328acd1ed355aaa35349f8f61876",
       "sourceName": "contracts/StakingContract.sol",
       "solcConfig": {
         "version": "0.8.20",
