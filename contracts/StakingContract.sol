@@ -129,8 +129,6 @@ contract StakingContract is ReentrancyGuard, Ownable, Pausable {
         StakeInfo storage userStake = stakes[msg.sender];
         require(userStake.amount >= amount, "Insufficient staked amount");
 
-        // 1. 锁定奖励（基于当前状态）
-        _updateReward(msg.sender);
         uint256 pendingRewards = calculateRewards(msg.sender);
 
         // 2. 更新状态

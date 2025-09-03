@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "D:\\study\\web3-homework\\stake-dapp\\contracts\\StakingContract.sol": {
-      "lastModificationDate": 1756895983176,
-      "contentHash": "2409328acd1ed355aaa35349f8f61876",
+    "D:\\study\\web3\\stake-dapp\\contracts\\StakingContract.sol": {
+      "lastModificationDate": 1756909207038,
+      "contentHash": "1c4a860ee597b4f09750a910bb4975eb",
       "sourceName": "contracts/StakingContract.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -41,8 +41,8 @@
         "StakingContract"
       ]
     },
-    "D:\\study\\web3-homework\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
-      "lastModificationDate": 1753777143152,
+    "D:\\study\\web3\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
+      "lastModificationDate": 1756907966997,
       "contentHash": "190613e556d509d9e9a0ea43dc5d891d",
       "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
       "solcConfig": {
@@ -77,8 +77,8 @@
         "ReentrancyGuard"
       ]
     },
-    "D:\\study\\web3-homework\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
-      "lastModificationDate": 1753777142880,
+    "D:\\study\\web3\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
+      "lastModificationDate": 1756907966774,
       "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
       "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
       "solcConfig": {
@@ -115,8 +115,8 @@
         "Ownable"
       ]
     },
-    "D:\\study\\web3-homework\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
-      "lastModificationDate": 1753777143063,
+    "D:\\study\\web3\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
+      "lastModificationDate": 1756907966926,
       "contentHash": "0d47b53e10b1985efbb396f937626279",
       "sourceName": "@openzeppelin/contracts/utils/Pausable.sol",
       "solcConfig": {
@@ -153,8 +153,8 @@
         "Pausable"
       ]
     },
-    "D:\\study\\web3-homework\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\Context.sol": {
-      "lastModificationDate": 1753777137122,
+    "D:\\study\\web3\\stake-dapp\\node_modules\\@openzeppelin\\contracts\\utils\\Context.sol": {
+      "lastModificationDate": 1756907962862,
       "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
       "sourceName": "@openzeppelin/contracts/utils/Context.sol",
       "solcConfig": {

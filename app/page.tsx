@@ -692,7 +692,7 @@ const STAKING_ABI = [
 ] as const;
 
 // 合约地址
-const STAKING_CONTRACT_ADDRESS = "0x66e6059D426A3E9AaEb4FEcb97f4f9e6F505ad3A" as `0x${string}`;
+const STAKING_CONTRACT_ADDRESS = "0x6F7e2dc7E633Ee9974d13FA44EABFA4694b5b036" as `0x${string}`;
 
 // 格式化工具函数
 const formatNumber = (num: number, decimals: number = 4) =>
